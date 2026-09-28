@@ -1,0 +1,97 @@
+COPY-PASTE TEMPLATES FOR THE INVESTMENT ASSISTANT
+=================================================
+The AI is offline: it only knows what you paste. Copy a template into the
+chat, fill in the numbers (from the Stake app, your broker app, NSE/BSE
+website, Screener, TradingView, etc.), delete lines you don't know.
+More data = better answer.
+
+
+------------------------------------------------------------------
+1) STAKE PROPERTY - NEW PURCHASE
+------------------------------------------------------------------
+Stake property - should I BUY, WAIT or AVOID?
+Name / location:
+Type (apartment / villa / fund), bedrooms, size:
+Total property price (AED or SAR):
+Funded so far (%):
+Projected gross yield (%):
+Projected net yield shown by Stake (%):
+Service charges per year:
+Stake fees (purchase fee % and yearly fee %):
+Projected capital growth per year shown by Stake (%):
+Holding period / exit date:
+Current rent and lease end date (if shown):
+Area notes (new buildings coming, demand, metro, etc.):
+My investment amount:
+My total savings / portfolio size:
+My goal (monthly income / growth / both) and horizon (years):
+Please give: my monthly and yearly income, value after 1/3/5 years,
+total return, risks, and a decision.
+
+
+------------------------------------------------------------------
+2) STAKE PROPERTY - ONE I ALREADY OWN
+------------------------------------------------------------------
+Stake property I own - HOLD, SELL at next exit window, or ADD MORE?
+Name / location:
+My amount invested and date:
+Current valuation of my stake (from Stake app):
+Rent received so far:
+Current gross / net yield (%):
+Occupancy (rented / vacant, lease end):
+Next exit window date:
+Any news (valuation change, service charge change, vacancy):
+Why I'm thinking of selling / adding:
+
+
+------------------------------------------------------------------
+3) INDIAN STOCK - BUY / SELL / HOLD
+------------------------------------------------------------------
+Indian stock - BUY, HOLD, SELL, WAIT or AVOID?
+Name / NSE symbol:
+Current price (Rs):
+52-week high / low:
+Market cap:
+P/E and sector (industry) P/E:
+EPS growth (last 3 years) / sales growth:
+ROE / ROCE (%):
+Debt to equity:
+Promoter holding (%) and pledged (%):
+Dividend yield (%):
+Latest quarterly result (sales, profit, vs last year):
+50-day and 200-day moving average:
+RSI (14):
+Recent support / resistance levels:
+Volume (above / below average):
+News / upcoming events (results date, RBI policy, budget):
+Timeframe I trade on (daily / weekly):
+My capital for trading/investing (Rs):
+Do I own it? buy price ____ quantity ____
+My holding period (intraday / weeks / months / years):
+Please give: decision, entry, stop-loss, targets, quantity for 1% risk,
+expected return range, and when to exit.
+
+
+------------------------------------------------------------------
+4) FOREX PAIR
+------------------------------------------------------------------
+Forex pair - trade plan or NO TRADE?
+Pair:
+Current price:
+Timeframe (e.g. H1, H4, Daily):
+Higher timeframe trend:
+Recent high / low:
+Key levels I see:
+News / events coming (central bank, CPI, jobs data):
+Account size and currency:
+My holding style preference:
+
+
+------------------------------------------------------------------
+TIPS
+------------------------------------------------------------------
+* Ask one property / stock / pair per chat for the best answers.
+* Keep "thinking" ON (don't start with the "fast" option).
+* Always check the maths with a calculator before you invest.
+* No AI can predict markets 100%. Use it as a second opinion,
+  not as a guarantee.

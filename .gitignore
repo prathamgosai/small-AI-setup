@@ -1,0 +1,2 @@
+﻿# Model weights exceed GitHub's 100MB file limit
+*.gguf

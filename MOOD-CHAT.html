@@ -1,0 +1,1324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2c2f36">
+<title>Mood Chat</title>
+<!--
+  MOOD CHAT - a chat page for Portable Qwen whose whole background follows
+  the topic and mood of the conversation.
+
+  How it works
+  * Start the AI first (START-WINDOWS.bat / START-MAC.command / START-LINUX.sh),
+    then double-click this file. It talks to the local llama.cpp server
+    (OpenAI-compatible API, default http://127.0.0.1:8080). Fully offline.
+  * After every user message and every AI reply, the AI itself classifies the
+    last 5 messages (hidden JSON-only request) and the background moves to
+    that theme. A keyword guess reacts instantly while the AI is working and
+    is also the fallback if the AI's answer can't be used.
+  * Everything (HTML, CSS, JS) is in this one file. No internet needed.
+-->
+<style>
+/* ==========================================================================
+   1. THEME COLOURS
+   Registered custom properties can be transitioned, so the whole scene
+   (gradient, blobs, glows) blends smoothly to a new palette in 1.5 s.
+   ========================================================================== */
+@property --c1 { syntax: '<color>'; inherits: true; initial-value: #2c2f36; }
+@property --c2 { syntax: '<color>'; inherits: true; initial-value: #8c93a0; }
+@property --c3 { syntax: '<color>'; inherits: true; initial-value: #5b6170; }
+
+:root {
+  --c1: #2c2f36;
+  --c2: #8c93a0;
+  --c3: #5b6170;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --radius: 22px;
+  --font: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  transition: --c1 1.5s var(--ease), --c2 1.5s var(--ease), --c3 1.5s var(--ease);
+}
+
+/* Readability tokens: "dark" tone = light text on dark glass, "light" tone = dark text on light glass. */
+body[data-tone="dark"] {
+  --text: #f5f7ff;
+  --text-soft: rgba(245, 247, 255, .68);
+  --panel: rgba(12, 14, 24, .34);
+  --panel-strong: rgba(12, 14, 24, .5);
+  --panel-border: rgba(255, 255, 255, .16);
+  --ai-bg: rgba(12, 14, 24, .4);
+  --user-bg: rgba(255, 255, 255, .9);
+  --user-text: #12141c;
+  --code-bg: rgba(0, 0, 0, .42);
+  --shadow: 0 10px 40px rgba(0, 0, 0, .28);
+}
+body[data-tone="light"] {
+  --text: #12141c;
+  --text-soft: rgba(18, 20, 28, .66);
+  --panel: rgba(255, 255, 255, .5);
+  --panel-strong: rgba(255, 255, 255, .72);
+  --panel-border: rgba(255, 255, 255, .7);
+  --ai-bg: rgba(255, 255, 255, .66);
+  --user-bg: rgba(18, 20, 30, .86);
+  --user-text: #f5f7ff;
+  --code-bg: rgba(15, 17, 25, .88);
+  --shadow: 0 10px 40px rgba(20, 20, 40, .16);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: #2c2f36;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: color 1.5s var(--ease);
+}
+button, input, textarea { font: inherit; color: inherit; }
+
+/* ==========================================================================
+   2. ANIMATED BACKGROUND (gradient + drifting aurora blobs + sheen + grain)
+   ========================================================================== */
+.bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--c1); pointer-events: none; }
+
+.bg__gradient {
+  position: absolute; inset: -10%;
+  background: linear-gradient(125deg, var(--c1) 0%, var(--c3) 48%, var(--c2) 100%);
+  background-size: 220% 220%;
+  animation: pan 24s ease-in-out infinite alternate;
+}
+.blob {
+  position: absolute; border-radius: 50%;
+  filter: blur(70px); will-change: transform; opacity: .7;
+}
+.blob--1 { width: 62vmax; height: 62vmax; top: -24vmax; left: -18vmax;
+  background: radial-gradient(circle at 35% 35%, var(--c2), transparent 66%);
+  animation: drift1 28s ease-in-out infinite alternate; }
+.blob--2 { width: 70vmax; height: 70vmax; bottom: -30vmax; right: -24vmax;
+  background: radial-gradient(circle, var(--c3), transparent 64%);
+  animation: drift2 34s ease-in-out infinite alternate; }
+.blob--3 { width: 46vmax; height: 46vmax; top: 28%; left: 38%; opacity: .55;
+  background: radial-gradient(circle, var(--c1), transparent 62%);
+  animation: drift3 40s ease-in-out infinite alternate; }
+.blob--4 { width: 34vmax; height: 34vmax; top: 8%; right: 6%; opacity: .45;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c2) 60%, #fff), transparent 60%);
+  animation: drift2 46s ease-in-out infinite alternate-reverse; }
+
+/* slow rotating light sweep */
+.bg__sheen {
+  position: absolute; left: 50%; top: 50%; width: 180vmax; height: 180vmax;
+  margin: -90vmax 0 0 -90vmax;
+  background: conic-gradient(from 0deg, transparent 0 20%, rgba(255,255,255,.09) 28%, transparent 38% 62%, rgba(255,255,255,.06) 72%, transparent 82%);
+  animation: spin 70s linear infinite;
+  mix-blend-mode: soft-light;
+}
+/* follows the mouse on desktop */
+.bg__spot {
+  position: absolute; inset: 0;
+  background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,.16), transparent 60%);
+  mix-blend-mode: soft-light;
+  transition: opacity .6s;
+}
+/* film grain for a premium, non-flat look */
+.bg__grain {
+  position: absolute; inset: 0; opacity: .09; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.bg__vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.3)); }
+/* soft flash when a new theme arrives */
+.bg__flash {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--c2) 70%, #fff), transparent 60%);
+  mix-blend-mode: soft-light;
+}
+.bg__flash.on { animation: flash 1.6s var(--ease); }
+
+#particles { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+@keyframes pan { 0% { background-position: 0% 30%; } 100% { background-position: 100% 70%; } }
+@keyframes drift1 { to { transform: translate(18vmax, 14vmax) scale(1.15); } }
+@keyframes drift2 { to { transform: translate(-16vmax, -12vmax) scale(.9); } }
+@keyframes drift3 { 0% { transform: translate(-10vmax, 6vmax) scale(.9); } 100% { transform: translate(8vmax, -10vmax) scale(1.2); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes flash { 0% { opacity: 0; } 25% { opacity: .9; } 100% { opacity: 0; } }
+
+/* ==========================================================================
+   3. APP LAYOUT
+   ========================================================================== */
+.app {
+  position: relative; z-index: 2;
+  height: 100vh; height: 100dvh;
+  display: grid; grid-template-rows: auto 1fr auto auto; grid-template-columns: minmax(0, 1fr);
+  max-width: 920px; margin: 0 auto;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(10px, env(safe-area-inset-bottom));
+  gap: 10px;
+}
+
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.12);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  transition: background-color 1.5s var(--ease), border-color 1.5s var(--ease), color 1.5s var(--ease), box-shadow 1.5s var(--ease);
+}
+
+/* ---------- header ---------- */
+.header {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px; border-radius: var(--radius);
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.orb {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; position: relative;
+  background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c1));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--c2) 70%, transparent);
+  animation: spin 8s linear infinite;
+}
+.orb::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--panel-strong); backdrop-filter: blur(6px); }
+.brand h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .2px; line-height: 1.1; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-soft);
+  background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: #9aa0aa; box-shadow: 0 0 0 3px rgba(154,160,170,.2); }
+.status[data-state="online"] i { background: #34d399; box-shadow: 0 0 0 3px rgba(52,211,153,.25); animation: breathe 2.4s infinite; }
+.status[data-state="loading"] i { background: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,.25); animation: breathe 1s infinite; }
+.status[data-state="offline"] i { background: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.25); }
+@keyframes breathe { 50% { transform: scale(.7); opacity: .6; } }
+
+/* topic badge */
+.badge-wrap { display: flex; justify-content: center; min-width: 0; }
+.badge {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 7px 14px 7px 8px; border-radius: 999px;
+  background: var(--panel-strong); border: 1px solid var(--panel-border);
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--c3) 45%, transparent);
+  transition: background-color 1.5s var(--ease), box-shadow 1.5s var(--ease), border-color 1.5s var(--ease);
+}
+.badge__emoji {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; flex: none;
+  background: linear-gradient(135deg, var(--c1), var(--c2));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+}
+.badge__text { overflow: hidden; text-overflow: ellipsis; }
+.badge__mood { font-weight: 500; color: var(--text-soft); }
+.badge.pop { animation: pop .7s var(--ease); }
+@keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.09); } 100% { transform: scale(1); } }
+.badge.sensing .badge__emoji { animation: sense 1.2s ease-in-out infinite; }
+@keyframes sense { 50% { transform: scale(.82); opacity: .7; } }
+
+.controls { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; cursor: pointer;
+  background: transparent; border: 1px solid transparent; transition: background-color .25s, transform .2s;
+}
+.icon-btn:hover { background: var(--panel-strong); }
+.icon-btn:active { transform: scale(.94); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+/* Mood Colors toggle */
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; padding: 0 6px; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle__track {
+  width: 40px; height: 23px; border-radius: 999px; position: relative; flex: none;
+  background: rgba(127,127,127,.4); transition: background .35s var(--ease);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.25);
+}
+.toggle__track::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 17px; height: 17px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .35s var(--ease);
+}
+.toggle input:checked + .toggle__track { background: linear-gradient(135deg, var(--c3), var(--c2)); }
+.toggle input:checked + .toggle__track::after { transform: translateX(17px); }
+.toggle input:focus-visible + .toggle__track { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* ---------- messages ---------- */
+.chat {
+  overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth;
+  padding: 8px 4px 16px;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.3) transparent;
+}
+.msg { display: flex; gap: 10px; margin: 14px 0; align-items: flex-end; animation: rise .5s var(--ease) both; }
+.msg--user { justify-content: flex-end; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 14px;
+  background: linear-gradient(135deg, var(--c1), var(--c2)); box-shadow: 0 4px 14px rgba(0,0,0,.2), inset 0 0 0 1px rgba(255,255,255,.3);
+}
+.bubble {
+  max-width: min(82%, 680px); padding: 12px 16px; border-radius: 20px; line-height: 1.6; font-size: 15px;
+  overflow-wrap: anywhere; border: 1px solid var(--panel-border);
+  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+  transition: background-color 1.5s var(--ease), color 1.5s var(--ease), border-color 1.5s var(--ease), box-shadow 1.5s var(--ease);
+}
+.msg--ai .bubble { background: var(--ai-bg); border-bottom-left-radius: 6px; box-shadow: var(--shadow); }
+.msg--user .bubble {
+  background: var(--user-bg); color: var(--user-text); border-bottom-right-radius: 6px; white-space: pre-wrap;
+  box-shadow: 0 10px 34px color-mix(in srgb, var(--c3) 45%, transparent);
+}
+.msg--error .bubble { background: rgba(120, 20, 30, .55); color: #fff; border-color: rgba(255,120,120,.4); }
+
+.bubble p { margin: 0 0 .7em; } .bubble p:last-child { margin-bottom: 0; }
+.bubble h3, .bubble h4, .bubble h5, .bubble h6 { margin: .8em 0 .4em; line-height: 1.3; }
+.bubble h3:first-child, .bubble h4:first-child { margin-top: 0; }
+.bubble ul, .bubble ol { margin: .3em 0 .7em; padding-left: 1.3em; }
+.bubble li { margin: .2em 0; }
+.bubble hr { border: 0; border-top: 1px solid var(--panel-border); margin: .8em 0; }
+.bubble code { font-family: var(--mono); font-size: .88em; padding: .12em .4em; border-radius: 6px; background: rgba(127,127,127,.2); }
+.bubble pre { margin: .6em 0; padding: 12px 14px; border-radius: 14px; background: var(--code-bg); color: #e8ecf4; overflow-x: auto; }
+.bubble pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; white-space: pre; }
+.bubble strong { font-weight: 700; }
+
+/* typing indicator */
+.typing { display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; }
+.typing span { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .5; animation: dot 1.3s infinite ease-in-out; }
+.typing span:nth-child(2) { animation-delay: .16s; }
+.typing span:nth-child(3) { animation-delay: .32s; }
+.typing em { font-style: normal; font-size: 12.5px; color: var(--text-soft); margin-left: 6px; }
+@keyframes dot { 0%, 70%, 100% { transform: translateY(0); opacity: .35; } 35% { transform: translateY(-6px); opacity: 1; } }
+.caret::after { content: "▍"; margin-left: 1px; animation: blink 1s steps(2) infinite; opacity: .7; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* welcome screen */
+.welcome { display: grid; place-items: center; min-height: 100%; padding: 16px 0; }
+.welcome__card { width: 100%; max-width: 640px; text-align: center; padding: 30px 22px 24px; border-radius: 28px; animation: rise .8s var(--ease) both; }
+.welcome__orb {
+  width: 76px; height: 76px; margin: 0 auto 16px; border-radius: 50%; display: grid; place-items: center; font-size: 34px;
+  background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--c2) 70%, #fff), var(--c3) 55%, var(--c1));
+  box-shadow: 0 0 60px color-mix(in srgb, var(--c2) 60%, transparent), inset 0 0 0 1px rgba(255,255,255,.35);
+  animation: float 5s ease-in-out infinite;
+}
+@keyframes float { 50% { transform: translateY(-8px); } }
+.welcome h2 { margin: 0 0 8px; font-size: clamp(22px, 4.5vw, 30px); letter-spacing: -.4px; }
+.welcome p { margin: 0 auto 20px; max-width: 460px; color: var(--text-soft); line-height: 1.55; font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: 13.5px;
+  background: var(--panel-strong); border: 1px solid var(--panel-border);
+  transition: transform .25s var(--ease), box-shadow .25s, background-color 1.5s;
+}
+.chip i { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.chip:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.notice { margin-top: 18px; font-size: 13px; padding: 10px 14px; border-radius: 14px; background: rgba(248,113,113,.18); border: 1px solid rgba(248,113,113,.35); display: none; }
+.notice.show { display: block; }
+
+/* ---------- composer ---------- */
+.composer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 18px; border-radius: 26px; }
+.composer:focus-within { box-shadow: var(--shadow), 0 0 0 2px color-mix(in srgb, var(--c2) 55%, transparent); }
+.composer textarea {
+  flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; max-height: 170px; min-height: 24px;
+  padding: 9px 0; line-height: 1.5; font-size: 15.5px;
+}
+.composer textarea::placeholder { color: var(--text-soft); }
+.send {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer; flex: none; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--c3), var(--c2));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--c3) 60%, transparent), inset 0 0 0 1px rgba(255,255,255,.3);
+  transition: transform .2s var(--ease), opacity .2s, box-shadow 1.5s;
+}
+.send svg { width: 20px; height: 20px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.send:hover { transform: scale(1.06); }
+.send:active { transform: scale(.94); }
+.send:disabled { opacity: .45; cursor: default; transform: none; }
+.send .i-stop { display: none; }
+.send.stop .i-send { display: none; }
+.send.stop .i-stop { display: block; }
+
+/* ---------- colour history strip ---------- */
+.history { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 16px; font-size: 12px; min-height: 36px; }
+.history__label { color: var(--text-soft); white-space: nowrap; font-weight: 600; letter-spacing: .3px; }
+.history__track { display: flex; gap: 6px; overflow-x: auto; flex: 1; scrollbar-width: none; padding: 3px 2px; }
+.history__track::-webkit-scrollbar { display: none; }
+.swatch {
+  width: 34px; height: 18px; border-radius: 999px; flex: none; position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2), inset 0 0 0 1px rgba(255,255,255,.4);
+  animation: swatchIn .6s var(--ease) both;
+}
+.swatch:last-child { outline: 2px solid var(--text); outline-offset: 2px; }
+@keyframes swatchIn { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: none; } }
+.history__empty { color: var(--text-soft); opacity: .8; }
+
+/* ---------- settings popover ---------- */
+.settings {
+  position: absolute; top: 70px; right: 16px; width: min(330px, calc(100% - 32px)); z-index: 5;
+  padding: 16px; border-radius: 20px; display: none; animation: rise .35s var(--ease);
+  background: var(--panel-strong);
+}
+.settings.open { display: block; }
+.settings h3 { margin: 0 0 12px; font-size: 15px; }
+.settings label { display: block; font-size: 12.5px; color: var(--text-soft); margin: 10px 0 5px; }
+.settings input[type="text"] {
+  width: 100%; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--panel-border); background: var(--panel); outline: 0;
+}
+.settings .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 13.5px; }
+.settings small { display: block; margin-top: 10px; color: var(--text-soft); line-height: 1.45; }
+.btn { padding: 8px 14px; border-radius: 12px; border: 0; cursor: pointer; font-weight: 600; font-size: 13px; color: #fff; background: linear-gradient(135deg, var(--c3), var(--c2)); }
+
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 680px) {
+  .app { padding-left: 10px; padding-right: 10px; gap: 8px; }
+  .header { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .controls { gap: 2px; }
+  .badge-wrap { grid-column: 1 / -1; grid-row: 2; }
+  .toggle__label { display: none; }
+  .bubble { max-width: 88%; font-size: 14.5px; }
+  .avatar { display: none; }
+  .settings { top: 110px; right: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body data-tone="dark">
+
+<!-- ================= Background layers ================= -->
+<div class="bg" aria-hidden="true">
+  <div class="bg__gradient"></div>
+  <div class="blob blob--1"></div>
+  <div class="blob blob--2"></div>
+  <div class="blob blob--3"></div>
+  <div class="blob blob--4"></div>
+  <div class="bg__sheen"></div>
+  <div class="bg__spot" id="spot"></div>
+  <div class="bg__flash" id="flash"></div>
+  <div class="bg__grain"></div>
+  <div class="bg__vignette"></div>
+</div>
+<canvas id="particles" aria-hidden="true"></canvas>
+
+<!-- ================= App ================= -->
+<div class="app">
+  <header class="header glass">
+    <div class="brand">
+      <div class="orb" aria-hidden="true"></div>
+      <div>
+        <h1>Mood Chat</h1>
+        <button class="status" id="status" data-state="checking" title="Click to re-check the AI server">
+          <i></i><span id="statusText">Connecting…</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="badge-wrap">
+      <div class="badge" id="badge" aria-live="polite">
+        <span class="badge__emoji" id="badgeEmoji">👋</span>
+        <span class="badge__text"><span id="badgeTopic">Hello</span> <span class="badge__mood">· <span id="badgeMood">Neutral</span></span></span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="toggle" title="Change the background with the topic and mood">
+        <input type="checkbox" id="moodToggle" checked>
+        <span class="toggle__track"></span>
+        <span class="toggle__label">Mood Colors</span>
+      </label>
+      <button class="icon-btn" id="newChat" title="New chat" aria-label="New chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="settings glass" id="settings" role="dialog" aria-label="Settings">
+    <h3>Settings</h3>
+    <label for="serverInput">AI server address</label>
+    <input type="text" id="serverInput" spellcheck="false" autocomplete="off">
+    <div class="row">
+      <span>Deep thinking <span style="opacity:.6">(smarter, much slower)</span></span>
+      <label class="toggle"><input type="checkbox" id="thinkToggle"><span class="toggle__track"></span></label>
+    </div>
+    <div class="row"><span></span><button class="btn" id="saveSettings">Save</button></div>
+    <small>Start the AI with START-WINDOWS.bat (or the Mac/Linux file) first. If it says it is using another port, put that port here, e.g. http://127.0.0.1:8081</small>
+  </div>
+
+  <main class="chat" id="chat" aria-live="polite">
+    <section class="welcome" id="welcome">
+      <div class="welcome__card glass">
+        <div class="welcome__orb" id="welcomeOrb">✨</div>
+        <h2>What's on your mind?</h2>
+        <p>Talk about anything. The whole world around this chat changes colour with the topic and mood of our conversation.</p>
+        <div class="chips" id="chips"></div>
+        <div class="notice" id="offlineNotice">
+          The AI isn't running yet. Double-click <b>START-WINDOWS.bat</b> (or the Mac/Linux start file), wait until it says “listening”, and this page connects by itself.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <form class="composer glass" id="composer" autocomplete="off">
+    <label for="input" class="sr-only">Message</label>
+    <textarea id="input" rows="1" placeholder="Message Mood Chat…" title="Enter to send · Shift+Enter for a new line"></textarea>
+    <button class="send" id="send" type="submit" aria-label="Send">
+      <svg class="i-send" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg>
+      <svg class="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+    </button>
+  </form>
+
+  <footer class="history glass" aria-label="Colour history">
+    <span class="history__label">🎨 Colour journey</span>
+    <div class="history__track" id="historyTrack"><span class="history__empty">Your conversation's colours will appear here</span></div>
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+/* ==========================================================================
+   SETTINGS (remembered in this browser only)
+   ========================================================================== */
+const store = {
+  get(key, fallback) {
+    try { const v = localStorage.getItem('moodchat.' + key); return v === null ? fallback : JSON.parse(v); }
+    catch { return fallback; }
+  },
+  set(key, value) { try { localStorage.setItem('moodchat.' + key, JSON.stringify(value)); } catch { /* storage blocked: ignore */ } }
+};
+const settings = {
+  server: store.get('server', 'http://127.0.0.1:8080'),
+  thinking: store.get('thinking', false),
+  mood: store.get('mood', true)
+};
+const SYSTEM_PROMPT = 'You are a warm, friendly and helpful assistant. Answer clearly and concisely. Use Markdown (lists, **bold**, code blocks) when it helps.';
+
+/* ==========================================================================
+   TOPIC PALETTES  (colors = gradient start → end, accent = third tone for blobs)
+   ========================================================================== */
+const PALETTES = {
+  technology: { label: 'Technology',        emoji: '🚀', colors: ['#0a1f44', '#00d4ff'], accent: '#2f5bff', particle: 'bits' },
+  nature:     { label: 'Nature',            emoji: '🌿', colors: ['#0f4d2e', '#a8e6cf'], accent: '#3fa36b', particle: 'leaves' },
+  love:       { label: 'Love',              emoji: '💖', colors: ['#ff5e8a', '#ffc3a0'], accent: '#ff8fab', particle: 'hearts' },
+  sadness:    { label: 'Sadness',           emoji: '🌧️', colors: ['#475a78', '#9aa5b1'], accent: '#66789a', particle: 'rain' },
+  happiness:  { label: 'Celebration',       emoji: '🎉', colors: ['#ffd23f', '#ff8c1a'], accent: '#ffb000', particle: 'confetti' },
+  space:      { label: 'Science & Space',   emoji: '🌌', colors: ['#05030f', '#6a2c91'], accent: '#2a1a6e', particle: 'stars' },
+  food:       { label: 'Food',              emoji: '🍅', colors: ['#d7263d', '#fff1d6'], accent: '#f46036', particle: 'sparkles' },
+  money:      { label: 'Money & Business',  emoji: '💰', colors: ['#046b4a', '#d4af37'], accent: '#0f9d58', particle: 'coins' },
+  health:     { label: 'Health & Fitness',  emoji: '💪', colors: ['#0f8b8d', '#b5e655'], accent: '#3ccf91', particle: 'bubbles' },
+  travel:     { label: 'Travel',            emoji: '✈️', colors: ['#4fb3ff', '#e8d3a9'], accent: '#8fd3ff', particle: 'orbs' },
+  history:    { label: 'History & Culture', emoji: '🏛️', colors: ['#704214', '#f1e3c6'], accent: '#a9744f', particle: 'sparkles' },
+  art:        { label: 'Art & Music',       emoji: '🎨', colors: ['#d6249f', '#7b2ff7'], accent: '#ff5edf', particle: 'notes' },
+  anger:      { label: 'Conflict',          emoji: '🔥', colors: ['#6b0f1a', '#2b2b2b'], accent: '#a4161a', particle: 'embers' },
+  calm:       { label: 'Calm',              emoji: '🧘', colors: ['#b8a1e3', '#cfe8ff'], accent: '#d9c8f5', particle: 'orbs' },
+  education:  { label: 'Learning',          emoji: '📚', colors: ['#4b4fa8', '#f5f7ff'], accent: '#8a8fe0', particle: 'sparkles' },
+  default:    { label: 'Hello',             emoji: '👋', colors: ['#262a36', '#9aa2b4'], accent: '#565e75', particle: 'bubbles' }
+};
+const PARTICLE_TYPES = ['stars', 'leaves', 'hearts', 'bubbles', 'confetti', 'rain', 'embers', 'notes', 'coins', 'sparkles', 'orbs', 'bits'];
+
+/* Keyword lists: used to (1) map the AI's free-text topic onto a palette and
+   (2) give an instant reaction to the user's message before the AI answers. */
+const KEYWORDS = {
+  technology: /\b(tech\w*|code|coding|coder|program\w*|software|computer\w*|javascript|typescript|python|java|html|css|api|bug\w*|debug\w*|apps?|website|web ?dev\w*|ai|robot\w*|algorithm\w*|database|server|laptop|phone|gadget\w*|internet|developer|git|linux|windows|cyber\w*)\b/g,
+  nature:     /\b(nature|natural|forest\w*|trees?|plants?|garden\w*|flowers?|environment\w*|climate|ocean\w*|rivers?|mountains?|animals?|wildlife|birds?|eco\w*|leaf|leaves|hiking|jungle|rain ?forest)\b/g,
+  love:       /\b(love|loving|lover|romanc\w*|romantic|relationships?|girlfriend|boyfriend|partner|crush|dating|wife|husband|marriage|marry|wedding|kiss\w*|valentine\w*|anniversary|feelings for)\b/g,
+  sadness:    /\b(sad|sadness|grief|griev\w*|lonely|loneliness|depress\w*|cry|crying|cried|tears|passed away|died|death|funeral|heartbroken|broken heart|upset|unhappy|miserable|hopeless|miss (him|her|them|you))\b/g,
+  happiness:  /\b(happy|happiness|celebrat\w*|party|birthday|congrat\w*|yay|excited|exciting|awesome|joy\w*|promotion|festival|diwali|christmas|eid|holi|wonderful|amazing news|great news)\b/g,
+  space:      /\b(space|planets?|stars?|galax\w*|universe|cosmos|cosmic|nasa|isro|astronom\w*|black holes?|nebula\w*|moon|mars|jupiter|rockets?|orbit\w*|science|scientific|physics|quantum|chemistry|biology)\b/g,
+  food:       /\b(food|foods|cook\w*|recipes?|bake|baking|dinner|lunch|breakfast|pizza|pasta|curry|dish|meals?|eat|eating|restaurant\w*|chef|dessert|cake|spicy|ingredients?|biryani|snacks?|tasty|delicious)\b/g,
+  money:      /\b(money|business\w*|invest\w*|stocks?|shares?|market\w*|finance|financial|profit\w*|salary|budget\w*|bank\w*|loan\w*|crypto\w*|bitcoin|trading|trader|forex|startup\w*|revenue|property|properties|rent\w*|yield|dividend\w*|nifty|sensex|rupees?|dollars?|savings?|income|stake)\b/g,
+  health:     /\b(health\w*|fitness|fit|workout\w*|exercis\w*|gym|running|diet\w*|protein|weight|muscle\w*|doctor|sick|illness|medicine|medical|calories?|nutrition|cardio|injury)\b/g,
+  travel:     /\b(travel\w*|trips?|vacation\w*|holidays?|flights?|beach\w*|adventure\w*|explor\w*|tour\w*|visit\w*|countries|passport|hotels?|backpack\w*|road trip|journey|itinerary|destination\w*)\b/g,
+  history:    /\b(history|historical|historic|ancient|empires?|wars?|kings?|queens?|culture\w*|cultural|traditions?|traditional|museum\w*|civili[sz]ation\w*|medieval|century|heritage|mughal\w*|roman\w*|pharaoh\w*)\b/g,
+  art:        /\b(art|arts|artist\w*|artistic|paint\w*|draw\w*|music\w*|songs?|sing\w*|guitar|piano|melody|poem\w*|poetry|creative|creativity|design\w*|danc\w*|films?|movies?|photograph\w*|sketch\w*)\b/g,
+  anger:      /\b(angry|anger|furious|mad at|hate|hated|annoy\w*|frustrat\w*|rage|fight\w*|argument\w*|conflict\w*|unfair|pissed|irritat\w*|betray\w*)\b/g,
+  calm:       /\b(calm\w*|relax\w*|meditat\w*|breath\w*|peace\w*|mindful\w*|stress\w*|anxious|anxiety|sleep\w*|restful|quiet|serene|zen|yoga)\b/g,
+  education:  /\b(learn\w*|study|studying|exams?|school|college|universit\w*|teach\w*|lessons?|homework|courses?|maths?|mathematics|student\w*|tutorial\w*|education\w*|explain)\b/g,
+  default:    /\b(hi|hello|hey|hii+|good (morning|evening|afternoon)|how are you|namaste|greetings?)\b/g
+};
+
+/* ==========================================================================
+   COLOUR HELPERS
+   ========================================================================== */
+function normHex(value) {
+  if (typeof value !== 'string') return null;
+  let h = value.trim().toLowerCase();
+  if (!h.startsWith('#')) h = '#' + h;
+  if (/^#[0-9a-f]{3}$/.test(h)) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  return /^#[0-9a-f]{6}$/.test(h) ? h : null;
+}
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function rgbToHex(rgb) { return '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join(''); }
+function mix(a, b, t) { const A = hexToRgb(a), B = hexToRgb(b); return rgbToHex(A.map((v, i) => v + (B[i] - v) * t)); }
+function luminance(h) {
+  const [r, g, b] = hexToRgb(h).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+  return .2126 * r + .7152 * g + .0722 * b;
+}
+function contrast(a, b) { const L1 = luminance(a), L2 = luminance(b); return (Math.max(L1, L2) + .05) / (Math.min(L1, L2) + .05); }
+
+/* ==========================================================================
+   DOM
+   ========================================================================== */
+const $ = sel => document.querySelector(sel);
+const chatEl = $('#chat'), inputEl = $('#input'), sendBtn = $('#send'), composer = $('#composer');
+const badge = $('#badge'), badgeEmoji = $('#badgeEmoji'), badgeTopic = $('#badgeTopic'), badgeMood = $('#badgeMood');
+const historyTrack = $('#historyTrack'), moodToggle = $('#moodToggle'), flashEl = $('#flash');
+const statusEl = $('#status'), statusText = $('#statusText');
+const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+/* ==========================================================================
+   PARTICLES  - themed canvas particles that cross-fade when the topic changes
+   ========================================================================== */
+const Particles = (() => {
+  const canvas = $('#particles');
+  const ctx = canvas.getContext('2d');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W = 0, H = 0, list = [], type = 'bubbles', palette = ['#ffffff'], time = 0, last = performance.now();
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = arr => arr[(Math.random() * arr.length) | 0];
+  const DENSITY = { stars: 2.4, rain: 1.8, confetti: 1.1, orbs: .22, embers: 1.3, bits: 1, sparkles: .9, leaves: .7, hearts: .7, bubbles: .8, notes: .55, coins: .6 };
+
+  function targetCount() {
+    const base = (W * H) / 26000 * (DENSITY[type] || 1);
+    return Math.round(Math.max(6, Math.min(reduceMotion ? 12 : 110, base)));
+  }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /* Direction a particle type travels: up (rises), down (falls) or float (drifts in place). */
+  const FLOW = { bubbles: 'up', hearts: 'up', embers: 'up', notes: 'up', bits: 'up', leaves: 'down', confetti: 'down', rain: 'down', coins: 'down', stars: 'float', sparkles: 'float', orbs: 'float' };
+
+  function make(t, scatter) {
+    const p = { t, x: rand(0, W), y: 0, vx: 0, vy: 0, s: 4, r: rand(0, Math.PI * 2), vr: 0, a: 1, ph: rand(0, 100), sway: 0, fade: 0, dying: false, c: pick(palette) };
+    switch (t) {
+      case 'bubbles':  p.s = rand(4, 16); p.vy = -rand(12, 34); p.sway = rand(8, 28); p.a = rand(.35, .7); break;
+      case 'hearts':   p.s = rand(9, 20); p.vy = -rand(14, 34); p.sway = rand(10, 30); p.a = rand(.45, .85); p.vr = rand(-.3, .3); p.r = rand(-.3, .3); break;
+      case 'embers':   p.s = rand(1.2, 3.2); p.vy = -rand(25, 70); p.sway = rand(6, 22); p.a = rand(.5, 1); p.c = pick(['#ff7a18', '#ffb347', '#ff4d2e', ...palette]); break;
+      case 'notes':    p.s = rand(14, 26); p.vy = -rand(14, 30); p.sway = rand(12, 30); p.a = rand(.45, .85); p.glyph = pick(['♪', '♫', '♩', '♬']); p.r = rand(-.3, .3); break;
+      case 'bits':     p.s = rand(9, 15); p.vy = -rand(18, 45); p.a = rand(.25, .7); p.glyph = pick(['0', '1']); p.sway = rand(0, 4); break;
+      case 'leaves':   p.s = rand(7, 14); p.vy = rand(18, 42); p.vx = rand(-12, 12); p.sway = rand(20, 50); p.vr = rand(-1.2, 1.2); p.a = rand(.55, .9);
+                       p.c = pick(['#5fbf6a', '#8fd694', '#3d9a50', '#c4e17f', ...palette]); break;
+      case 'confetti': p.s = rand(5, 10); p.vy = rand(40, 95); p.vx = rand(-15, 15); p.vr = rand(-5, 5); p.a = rand(.7, 1); p.sway = rand(5, 25);
+                       p.c = `hsl(${rand(0, 360) | 0} 90% 60%)`; break;
+      case 'rain':     p.s = rand(10, 24); p.vy = rand(380, 620); p.vx = -rand(30, 60); p.a = rand(.18, .42); break;
+      case 'coins':    p.s = rand(6, 11); p.vy = rand(28, 60); p.vx = rand(-6, 6); p.a = rand(.6, .95); p.c = pick(['#f5c542', '#e0b12e', '#ffd966']); break;
+      case 'stars':    p.s = rand(.5, 2.2); p.vx = rand(-3, 3); p.vy = rand(-2, 2); p.a = rand(.4, 1); p.c = pick(['#ffffff', '#ffffff', '#dcd6ff', ...palette]); break;
+      case 'sparkles': p.s = rand(2.5, 7); p.vx = rand(-6, 6); p.vy = -rand(3, 12); p.a = rand(.4, .95); break;
+      case 'orbs':     p.s = rand(40, 130); p.vx = rand(-10, 10); p.vy = rand(-8, 8); p.a = rand(.12, .28); break;
+    }
+    const flow = FLOW[t];
+    if (scatter || flow === 'float') p.y = rand(0, H);
+    else p.y = flow === 'up' ? H + p.s * 2 + rand(0, 60) : -p.s * 2 - rand(0, 60);
+    p.baseX = p.x;
+    return p;
+  }
+
+  function update(p, dt) {
+    p.fade = p.dying ? p.fade - dt / 1.2 : Math.min(1, p.fade + dt / 1.2);
+    p.baseX += p.vx * dt;
+    p.y += p.vy * dt;
+    p.r += p.vr * dt;
+    p.x = p.baseX + Math.sin(time * .8 + p.ph) * p.sway;
+    const m = p.s * 3 + 20, flow = FLOW[p.t];
+    let out = false;
+    if (flow === 'up' && p.y < -m) out = true;
+    else if (flow === 'down' && (p.y > H + m || p.x < -m - 60)) out = true;
+    else if (flow === 'float') {           // drifting types wrap around the edges
+      if (p.baseX < -m) p.baseX = W + m; else if (p.baseX > W + m) p.baseX = -m;
+      if (p.y < -m) p.y = H + m; else if (p.y > H + m) p.y = -m;
+    }
+    return out;
+  }
+
+  function heartPath(s) {
+    ctx.beginPath();
+    ctx.moveTo(0, s * .3);
+    ctx.bezierCurveTo(0, 0, -s * .5, 0, -s * .5, s * .3);
+    ctx.bezierCurveTo(-s * .5, s * .6, 0, s * .75, 0, s);
+    ctx.bezierCurveTo(0, s * .75, s * .5, s * .6, s * .5, s * .3);
+    ctx.bezierCurveTo(s * .5, 0, 0, 0, 0, s * .3);
+    ctx.closePath();
+  }
+  function sparklePath(s) {
+    ctx.beginPath();
+    ctx.moveTo(0, -s); ctx.quadraticCurveTo(0, 0, s, 0); ctx.quadraticCurveTo(0, 0, 0, s);
+    ctx.quadraticCurveTo(0, 0, -s, 0); ctx.quadraticCurveTo(0, 0, 0, -s); ctx.closePath();
+  }
+
+  function draw(p) {
+    const twinkle = (p.t === 'stars' || p.t === 'sparkles') ? .45 + .55 * Math.abs(Math.sin(time * 1.6 + p.ph)) :
+                    p.t === 'embers' ? .6 + .4 * Math.sin(time * 9 + p.ph) : 1;
+    const alpha = Math.max(0, p.a * p.fade * twinkle);
+    if (alpha <= .01) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = ctx.strokeStyle = p.c;
+    switch (p.t) {
+      case 'bubbles': {
+        const g = ctx.createRadialGradient(-p.s * .35, -p.s * .35, 0, 0, 0, p.s);
+        g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(.6, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(255,255,255,.18)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, p.s, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.stroke();
+        break;
+      }
+      case 'hearts':
+        ctx.rotate(p.r); ctx.translate(0, -p.s / 2); heartPath(p.s); ctx.fill(); break;
+      case 'embers': {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, p.s * 4);
+        g.addColorStop(0, p.c); g.addColorStop(.25, p.c); g.addColorStop(1, 'rgba(255,80,20,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, p.s * 4, 0, Math.PI * 2); ctx.fill(); break;
+      }
+      case 'notes':
+      case 'bits':
+        ctx.rotate(p.r || 0);
+        ctx.font = `${p.t === 'bits' ? '600 ' : ''}${p.s}px ${p.t === 'bits' ? 'Consolas, monospace' : 'serif'}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.glyph, 0, 0); break;
+      case 'leaves':
+        ctx.rotate(p.r);
+        ctx.beginPath(); ctx.moveTo(0, -p.s); ctx.quadraticCurveTo(p.s * .75, 0, 0, p.s); ctx.quadraticCurveTo(-p.s * .75, 0, 0, -p.s); ctx.fill();
+        ctx.globalAlpha = alpha * .5; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = .8;
+        ctx.beginPath(); ctx.moveTo(0, -p.s * .9); ctx.lineTo(0, p.s * 1.15); ctx.stroke(); break;
+      case 'confetti':
+        ctx.rotate(p.r); ctx.scale(1, Math.cos(p.r * 1.7 + p.ph)); ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); break;
+      case 'rain':
+        ctx.strokeStyle = 'rgba(220,235,255,1)'; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(p.vx * .035, -p.s); ctx.stroke(); break;
+      case 'coins':
+        ctx.scale(Math.max(.08, Math.abs(Math.cos(time * 2.5 + p.ph))), 1);
+        ctx.beginPath(); ctx.arc(0, 0, p.s, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(140,100,10,.6)'; ctx.beginPath(); ctx.arc(0, 0, p.s * .68, 0, Math.PI * 2); ctx.stroke(); break;
+      case 'stars':
+        ctx.beginPath(); ctx.arc(0, 0, p.s, 0, Math.PI * 2); ctx.fill();
+        if (p.s > 1.6) { ctx.globalAlpha = alpha * .5; ctx.fillRect(-p.s * 3.5, -.4, p.s * 7, .8); ctx.fillRect(-.4, -p.s * 3.5, .8, p.s * 7); }
+        break;
+      case 'sparkles':
+        ctx.rotate(p.r * .2); sparklePath(p.s); ctx.fill(); break;
+      case 'orbs': {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, p.s);
+        g.addColorStop(0, p.c); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, p.s, 0, Math.PI * 2); ctx.fill(); break;
+      }
+    }
+    ctx.restore();
+  }
+
+  /* Occasional shooting star in space mode */
+  let shooting = null;
+  function drawShooting(dt) {
+    if (type !== 'stars' || reduceMotion) { shooting = null; return; }
+    if (!shooting && Math.random() < dt * .12) shooting = { x: rand(W * .2, W), y: rand(0, H * .4), life: 0 };
+    if (!shooting) return;
+    shooting.life += dt;
+    const k = shooting.life / .9, len = 140;
+    const x = shooting.x - k * 520, y = shooting.y + k * 260;
+    const g = ctx.createLinearGradient(x, y, x + len, y - len / 2);
+    g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.globalAlpha = Math.sin(Math.min(1, k) * Math.PI); ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y - len / 2); ctx.stroke(); ctx.restore();
+    if (k >= 1) shooting = null;
+  }
+
+  function frame(now) {
+    const dt = Math.min(.05, (now - last) / 1000);
+    last = now; time += dt;
+    ctx.clearRect(0, 0, W, H);
+
+    // keep the live population at the target: replace particles that left the screen
+    let alive = 0;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const p = list[i];
+      const out = update(p, dt);
+      if ((p.dying && p.fade <= 0) || (out && p.dying)) { list.splice(i, 1); continue; }
+      if (out) { list[i] = make(type === p.t ? p.t : type, false); }
+      if (!list[i].dying) alive++;
+    }
+    const need = targetCount() - alive;
+    for (let i = 0; i < need; i++) list.push(make(type, true));
+    if (need < 0) { let extra = -need; for (const p of list) { if (extra <= 0) break; if (!p.dying) { p.dying = true; extra--; } } }
+
+    for (const p of list) draw(p);
+    drawShooting(dt);
+    requestAnimationFrame(frame);
+  }
+
+  function setTheme(newType, colors) {
+    palette = colors.length ? colors : ['#ffffff'];
+    if (newType !== type) {
+      list.forEach(p => { p.dying = true; });   // old particles fade out...
+      type = newType;                           // ...new ones fade in (spawned in frame())
+    } else {
+      list.forEach(p => { if (!['confetti', 'coins', 'embers', 'leaves'].includes(p.t) && !(p.t === 'stars' && p.c === '#ffffff')) p.c = pick(palette); });
+    }
+  }
+
+  addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+  return { setTheme };
+})();
+
+/* ==========================================================================
+   THEME ENGINE
+   ========================================================================== */
+const DEFAULT_THEME = themeFromPalette('default', 'Neutral');
+let currentTheme = null;          // theme currently shown
+let lastDetected = DEFAULT_THEME; // last theme the detector produced (kept while Mood Colors is off)
+const colorHistory = [];
+
+function themeFromPalette(key, mood, emoji) {
+  const p = PALETTES[key];
+  return { key, label: p.label, emoji: emoji || p.emoji, mood: mood || 'Neutral', c1: p.colors[0], c2: p.colors[1], c3: p.accent, particle: p.particle, textColor: null };
+}
+
+const titleCase = s => s.replace(/\b\w/g, ch => ch.toUpperCase());
+
+/* Map a free-text topic like "Python web development" onto one of the palettes. */
+function topicToKey(topic) {
+  const t = String(topic || '').toLowerCase();
+  if (!t) return null;
+  if (PALETTES[t]) return t;
+  if (/greet|neutral|general|default|small talk|casual|chit/.test(t)) return 'default';
+  for (const key of Object.keys(KEYWORDS)) {
+    KEYWORDS[key].lastIndex = 0;
+    if (KEYWORDS[key].test(t)) return key;
+  }
+  return null;
+}
+
+/* Turn the detector's (untrusted) JSON into a safe theme object. */
+function buildTheme(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const topic = String(raw.topic || '').replace(/[^\p{L}\p{N} &/'-]/gu, '').trim().slice(0, 28);
+  let mood = String(raw.mood || '').replace(/[^\p{L} -]/gu, '').trim().split(/\s+/)[0] || 'Neutral';
+  mood = titleCase(mood.toLowerCase()).slice(0, 16);
+  const emojiRaw = String(raw.emoji || '').trim();
+  const emoji = emojiRaw && !/[\p{L}\p{N}]/u.test(emojiRaw) && [...emojiRaw].length <= 4 ? emojiRaw : null;
+  const particle = PARTICLE_TYPES.includes(String(raw.particle).toLowerCase()) ? String(raw.particle).toLowerCase() : null;
+  const textColor = normHex(raw.textColor);
+  const key = topicToKey(topic);
+
+  if (key) {                                   // known topic -> curated palette
+    const t = themeFromPalette(key, mood, emoji);
+    t.textColor = textColor;
+    return t;
+  }
+  const colors = Array.isArray(raw.colors) ? raw.colors.map(normHex).filter(Boolean) : [];
+  if (!topic || colors.length < 2) return null; // unusable -> caller falls back
+  return {                                     // new topic -> the AI's own colours
+    key: 'custom:' + topic.toLowerCase(), label: titleCase(topic), emoji: emoji || '✨', mood,
+    c1: colors[0], c2: colors[1], c3: mix(colors[0], colors[1], .5),
+    particle: particle || 'sparkles', textColor
+  };
+}
+
+/* Pick light-on-dark or dark-on-light UI for the given gradient. */
+function toneFor(theme) {
+  const mid = mix(mix(theme.c1, theme.c2, .5), theme.c3, .33);
+  let tone = luminance(mid) > .36 ? 'light' : 'dark';
+  // Honour the AI's textColor only when it really is readable on the background.
+  if (theme.textColor && contrast(theme.textColor, mid) >= 4.5) tone = luminance(theme.textColor) > .5 ? 'dark' : 'light';
+  return tone;
+}
+
+function particleColors(theme, tone) {
+  return tone === 'dark'
+    ? [mix(theme.c2, '#ffffff', .35), mix(theme.c3, '#ffffff', .5), '#ffffff', theme.c2]
+    : [mix(theme.c1, '#ffffff', .15), theme.c3, mix(theme.c1, '#000000', .15), '#ffffff'];
+}
+
+function applyTheme(theme, { record = true } = {}) {
+  const shown = settings.mood ? theme : DEFAULT_THEME;
+  const changed = !currentTheme || currentTheme.c1 !== shown.c1 || currentTheme.c2 !== shown.c2 || currentTheme.particle !== shown.particle;
+  const root = document.documentElement.style;
+  root.setProperty('--c1', shown.c1);
+  root.setProperty('--c2', shown.c2);
+  root.setProperty('--c3', shown.c3);
+  metaTheme.setAttribute('content', shown.c1);
+  const tone = toneFor(shown);
+  document.body.dataset.tone = tone;
+  Particles.setTheme(shown.particle, particleColors(shown, tone));
+
+  // badge
+  if (settings.mood) {
+    badgeEmoji.textContent = theme.emoji;
+    badgeTopic.textContent = theme.label;
+    badgeMood.textContent = theme.mood;
+  } else {
+    badgeEmoji.textContent = '⚪';
+    badgeTopic.textContent = 'Mood colors off';
+    badgeMood.textContent = theme.label;
+  }
+  const orb = $('#welcomeOrb');
+  if (orb) orb.textContent = settings.mood ? theme.emoji : '✨';
+  if (changed) {
+    badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop');
+    flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on');
+  }
+
+  // neutral grey is only recorded once the journey has started
+  if (record && settings.mood && (theme.key !== 'default' || colorHistory.length)) addHistory(theme);
+  currentTheme = shown;
+}
+
+function addHistory(theme) {
+  const prev = colorHistory[colorHistory.length - 1];
+  if (prev && prev.c1 === theme.c1 && prev.c2 === theme.c2) {   // same colours: just refresh the label
+    colorHistory[colorHistory.length - 1] = theme;
+    const last = historyTrack.lastElementChild;
+    if (last) { last.title = `${theme.emoji} ${theme.label} · ${theme.mood}`; last.setAttribute('aria-label', last.title); }
+    return;
+  }
+  colorHistory.push(theme);
+  if (colorHistory.length === 1) historyTrack.innerHTML = '';
+  const sw = document.createElement('span');
+  sw.className = 'swatch';
+  sw.style.background = `linear-gradient(90deg, ${theme.c1}, ${theme.c3}, ${theme.c2})`;
+  sw.title = `${theme.emoji} ${theme.label} · ${theme.mood}`;
+  sw.setAttribute('role', 'img');
+  sw.setAttribute('aria-label', sw.title);
+  historyTrack.appendChild(sw);
+  historyTrack.scrollTo({ left: historyTrack.scrollWidth, behavior: 'smooth' });
+}
+
+function resetHistory() {
+  colorHistory.length = 0;
+  historyTrack.innerHTML = '<span class="history__empty">Your conversation\'s colours will appear here</span>';
+}
+
+/* Instant, offline guess from keywords (recent messages count more). */
+function keywordTheme(msgs) {
+  const scores = {};
+  const recent = msgs.slice(-3).reverse();
+  recent.forEach((m, i) => {
+    const w = [1, .55, .3][i] * (m.role === 'user' ? 1.3 : 1);
+    const text = m.content.toLowerCase();
+    for (const [key, re] of Object.entries(KEYWORDS)) {
+      re.lastIndex = 0;
+      const hits = (text.match(re) || []).length;
+      if (hits) scores[key] = (scores[key] || 0) + Math.min(hits, 4) * w * (key === 'education' || key === 'default' ? .6 : 1);
+    }
+  });
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return best ? themeFromPalette(best[0], moodGuess(recent[0] ? recent[0].content : '')) : null;
+}
+function moodGuess(text) {
+  const t = text.toLowerCase();
+  if (/[!]{2,}|excit|amazing|awesome|yay|love it/.test(t)) return 'Excited';
+  if (/\?/.test(t)) return 'Curious';
+  if (/sad|miss|lonely|cry|hurt/.test(t)) return 'Sad';
+  if (/angry|hate|annoy|furious/.test(t)) return 'Frustrated';
+  if (/thank|great|nice|happy/.test(t)) return 'Happy';
+  return 'Engaged';
+}
+
+/* ==========================================================================
+   AI SERVER (llama.cpp, OpenAI-compatible)
+   ========================================================================== */
+const apiUrl = path => settings.server.replace(/\/+$/, '') + path;
+
+async function checkHealth() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 3000);
+  let state = 'offline';
+  try {
+    const res = await fetch(apiUrl('/health'), { signal: ctrl.signal, cache: 'no-store' });
+    state = res.ok ? 'online' : res.status === 503 ? 'loading' : 'offline';
+  } catch { state = 'offline'; }
+  clearTimeout(timer);
+  statusEl.dataset.state = state;
+  statusText.textContent = { online: 'Offline AI · ready', loading: 'AI is loading…', offline: 'AI not running' }[state];
+  const notice = $('#offlineNotice');
+  if (notice) notice.classList.toggle('show', state === 'offline');
+  return state;
+}
+
+/* Strip Qwen-style <think> blocks (also an unfinished one while streaming). */
+const stripThinking = s => s.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '').replace(/^\s+/, '');
+
+/* Stream a chat reply. onDelta(fullText, isThinking) is called as tokens arrive. */
+async function streamReply(history, signal, onDelta) {
+  const res = await fetch(apiUrl('/v1/chat/completions'), {
+    method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...history.slice(-20)],
+      stream: true, temperature: .7,
+      chat_template_kwargs: { enable_thinking: !!settings.thinking }
+    })
+  });
+  if (!res.ok) throw new Error(await errorText(res));
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '', text = '', thinking = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const l = line.trim();
+      if (!l.startsWith('data:')) continue;
+      const data = l.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let json;
+      try { json = JSON.parse(data); } catch { continue; }
+      if (json.error) throw new Error(json.error.message || 'The AI returned an error.');
+      const delta = (json.choices && json.choices[0] && json.choices[0].delta) || {};
+      if (delta.reasoning_content) thinking = true;
+      if (delta.content) { text += delta.content; thinking = false; }
+      onDelta(stripThinking(text), thinking || /<think>(?![\s\S]*<\/think>)/.test(text));
+    }
+  }
+  return stripThinking(text).trim();
+}
+
+async function errorText(res) {
+  try { const j = await res.json(); return (j.error && j.error.message) || `Server error ${res.status}`; }
+  catch { return `Server error ${res.status}`; }
+}
+
+/* ---- Hidden mood/topic detector: asks the AI for JSON only ---- */
+const DETECT_PROMPT = `You classify the TOPIC and MOOD of a chat conversation for a colour theme.
+Reply with ONLY one valid JSON object and nothing else - no markdown, no explanation.
+Keys:
+- "topic": 1-2 lowercase words. Prefer one of: technology, nature, love, sadness, happiness, space, food, money, health, travel, history, art, anger, calm, education, greeting. Use your own word only if none fits.
+- "emoji": one emoji for the topic
+- "mood": one word (e.g. curious, joyful, sad, calm, excited, angry, romantic, focused, nostalgic, hopeful)
+- "colors": two hex colours for a background gradient that fits the topic and mood
+- "textColor": hex colour readable on those colours
+- "particle": one of stars, leaves, hearts, bubbles, confetti, rain, embers, notes, coins, sparkles, orbs, bits
+Focus most on the LAST messages.
+Example: {"topic":"technology","emoji":"🚀","mood":"curious","colors":["#0a1f44","#00d4ff"],"textColor":"#ffffff","particle":"bits"}`;
+
+/* Robustly pull a JSON object out of a model answer. */
+function parseJsonLoose(text) {
+  if (!text) return null;
+  let s = stripThinking(String(text)).replace(/```(?:json)?/gi, '').trim();
+  const start = s.indexOf('{'), end = s.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  s = s.slice(start, end + 1);
+  try { return JSON.parse(s); }
+  catch {
+    try { return JSON.parse(s.replace(/,\s*([}\]])/g, '$1').replace(/'/g, '"')); } catch { return null; }
+  }
+}
+
+async function requestDetection(transcript, useJsonMode) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  try {
+    const body = {
+      messages: [{ role: 'system', content: DETECT_PROMPT }, { role: 'user', content: 'Conversation:\n' + transcript + '\n\nJSON:' }],
+      temperature: .2, max_tokens: 160, stream: false,
+      chat_template_kwargs: { enable_thinking: false }
+    };
+    if (useJsonMode) body.response_format = { type: 'json_object' };
+    const res = await fetch(apiUrl('/v1/chat/completions'), {
+      method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (res.status === 400 && useJsonMode) return requestDetection(transcript, false); // server without JSON mode
+    if (!res.ok) return null;
+    const j = await res.json();
+    const msg = j.choices && j.choices[0] && j.choices[0].message;
+    return msg ? parseJsonLoose(msg.content || msg.reasoning_content) : null;
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
+
+let detectSeq = 0;
+async function detectMood() {
+  const id = ++detectSeq;
+  const recent = messages.slice(-5);
+  if (!recent.length) return;
+  const transcript = recent.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.replace(/\s+/g, ' ').slice(0, 500)}`).join('\n');
+  badge.classList.add('sensing');
+  const raw = await requestDetection(transcript, true);
+  if (id !== detectSeq) return;                 // a newer detection superseded this one
+  badge.classList.remove('sensing');
+  // Fallback chain: AI JSON -> keyword guess -> neutral grey
+  const theme = buildTheme(raw) || keywordTheme(recent) || DEFAULT_THEME;
+  lastDetected = theme;
+  applyTheme(theme);
+  saveChat();
+}
+
+/* ==========================================================================
+   MARKDOWN (small, safe renderer: everything is HTML-escaped first)
+   ========================================================================== */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function inline(s) {
+  const codes = [];
+  s = esc(s).replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return `\u0000${codes.length - 1}\u0000`; });
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+       .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, '$1<em>$2</em>');
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
+}
+function renderBlocks(text) {
+  let out = '', para = [], list = null;
+  const flushPara = () => { if (para.length) { out += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; } };
+  const flushList = () => { if (list) { out += `<${list.tag}>` + list.items.map(i => `<li>${inline(i)}</li>`).join('') + `</${list.tag}>`; list = null; } };
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    let m;
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if ((m = line.match(/^(#{1,6})\s+(.*)/))) { flushPara(); flushList(); const lv = Math.min(m[1].length + 2, 6); out += `<h${lv}>${inline(m[2])}</h${lv}>`; continue; }
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushPara(); flushList(); out += '<hr>'; continue; }
+    if ((m = line.match(/^\s*[-*•+]\s+(.*)/))) { flushPara(); if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; } list.items.push(m[1]); continue; }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { flushPara(); if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; } list.items.push(m[1]); continue; }
+    flushList(); para.push(line);
+  }
+  flushPara(); flushList();
+  return out;
+}
+function renderMarkdown(src) {
+  return src.split('```').map((part, i) => {
+    if (i % 2 === 0) return renderBlocks(part);
+    const nl = part.indexOf('\n');
+    const code = nl >= 0 && /^[\w+#.-]*$/.test(part.slice(0, nl).trim()) ? part.slice(nl + 1) : part;
+    return `<pre><code>${esc(code.replace(/\n$/, ''))}</code></pre>`;
+  }).join('');
+}
+
+/* ==========================================================================
+   CHAT UI
+   ========================================================================== */
+let messages = [];          // [{role, content}]
+let busy = false, abortCtrl = null;
+
+function nearBottom() { return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 140; }
+function scrollToBottom(force) { if (force || nearBottom()) chatEl.scrollTop = chatEl.scrollHeight; }
+
+function addBubble(role, html) {
+  $('#welcome') && $('#welcome').remove();
+  const row = document.createElement('div');
+  row.className = `msg msg--${role}`;
+  if (role !== 'user') {
+    const av = document.createElement('div');
+    av.className = 'avatar'; av.textContent = role === 'error' ? '⚠️' : '✦'; av.setAttribute('aria-hidden', 'true');
+    row.appendChild(av);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (html != null) bubble.innerHTML = html;
+  row.appendChild(bubble);
+  chatEl.appendChild(row);
+  scrollToBottom(true);
+  return bubble;
+}
+
+const TYPING_HTML = label => `<span class="typing" aria-label="AI is typing"><span></span><span></span><span></span>${label ? `<em>${label}</em>` : ''}</span>`;
+
+function setBusy(on) {
+  busy = on;
+  sendBtn.classList.toggle('stop', on);
+  sendBtn.setAttribute('aria-label', on ? 'Stop' : 'Send');
+  updateSendState();
+}
+function updateSendState() { sendBtn.disabled = !busy && !inputEl.value.trim(); }
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  inputEl.value = ''; autoGrow(); updateSendState();
+
+  messages.push({ role: 'user', content: text });
+  addBubble('user', esc(text));
+
+  // Instant guess from this message only; not recorded in the colour journey until the AI confirms it.
+  const quick = keywordTheme(messages.slice(-1));
+  if (quick) { lastDetected = quick; applyTheme(quick, { record: false }); }
+  detectMood();                                  // AI refines it in the background
+
+  const bubble = addBubble('ai', TYPING_HTML(settings.thinking ? 'thinking…' : ''));
+  setBusy(true);
+  abortCtrl = new AbortController();
+  let pending = false, latest = '', latestThinking = false;
+  const paint = () => {
+    pending = false;
+    if (latest) { bubble.innerHTML = renderMarkdown(latest); bubble.classList.add('caret'); }
+    else bubble.innerHTML = TYPING_HTML(latestThinking ? 'thinking…' : '');
+    scrollToBottom();
+  };
+
+  try {
+    const reply = await streamReply(messages, abortCtrl.signal, (t, thinking) => {
+      latest = t; latestThinking = thinking;
+      if (!pending) { pending = true; requestAnimationFrame(paint); }
+    });
+    await new Promise(r => requestAnimationFrame(r));
+    bubble.classList.remove('caret');
+    if (!reply) throw new Error('The AI returned an empty answer. Please try again.');
+    bubble.innerHTML = renderMarkdown(reply);
+    messages.push({ role: 'assistant', content: reply });
+  } catch (err) {
+    bubble.classList.remove('caret');
+    if (err.name === 'AbortError') {
+      const partial = stripThinking(latest).trim();
+      if (partial) { bubble.innerHTML = renderMarkdown(partial) + '<p style="opacity:.6"><em>(stopped)</em></p>'; messages.push({ role: 'assistant', content: partial }); }
+      else bubble.closest('.msg').remove();
+    } else {
+      bubble.closest('.msg').remove();
+      const state = await checkHealth();
+      const hint = state === 'offline'
+        ? 'Can\'t reach the AI. Start it with <b>START-WINDOWS.bat</b> (or the Mac/Linux file), wait until it says “listening”, then send again.'
+        : state === 'loading' ? 'The AI is still loading the model. Please wait a moment and send again.'
+        : esc(err.message || 'Something went wrong.');
+      addBubble('error', hint);
+      messages.pop();                        // let the user resend the same message
+      inputEl.value = text; autoGrow();
+    }
+  } finally {
+    setBusy(false);
+    abortCtrl = null;
+    scrollToBottom();
+    if (messages.length && messages[messages.length - 1].role === 'assistant') detectMood();
+    saveChat();
+    inputEl.focus();
+  }
+}
+
+function autoGrow() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 170) + 'px';
+}
+
+/* ---- welcome chips ---- */
+const SUGGESTIONS = [
+  ['technology', 'How does a neural network learn?'],
+  ['space', 'What is inside a black hole?'],
+  ['nature', 'Easy plants for a sunny balcony'],
+  ['love', 'Sweet anniversary surprise ideas'],
+  ['food', 'A quick paneer dinner recipe'],
+  ['money', 'Explain SIP vs lump-sum investing'],
+  ['travel', 'Plan a 5-day trip to Kerala'],
+  ['calm', 'Guide me through a 2-minute breathing exercise']
+];
+function renderChips() {
+  const wrap = $('#chips');
+  SUGGESTIONS.forEach(([key, text]) => {
+    const p = PALETTES[key];
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip';
+    b.innerHTML = `<i style="background:linear-gradient(135deg,${p.colors[0]},${p.colors[1]})"></i>${p.emoji} ${esc(text)}`;
+    b.addEventListener('click', () => send(text));
+    wrap.appendChild(b);
+  });
+}
+
+function newChat() {
+  if (abortCtrl) abortCtrl.abort();
+  detectSeq++;
+  badge.classList.remove('sensing');
+  messages = [];
+  chatEl.innerHTML = `<section class="welcome" id="welcome">${welcomeTemplate}</section>`;
+  $('#chips').innerHTML = '';
+  renderChips();
+  resetHistory();
+  lastDetected = DEFAULT_THEME;
+  applyTheme(DEFAULT_THEME, { record: false });
+  store.set('chat', null);
+  checkHealth();
+  inputEl.focus();
+}
+
+/* ---- keep the conversation across page reloads (this browser only) ---- */
+function saveChat() {
+  store.set('chat', { messages: messages.slice(-200), history: colorHistory.slice(-60), theme: lastDetected });
+}
+function validTheme(t) {
+  return !!t && typeof t === 'object' && [t.c1, t.c2, t.c3].every(c => normHex(c) === c)
+    && PARTICLE_TYPES.includes(t.particle) && [t.label, t.emoji, t.mood].every(v => typeof v === 'string');
+}
+function restoreChat() {
+  const saved = store.get('chat', null);
+  if (!saved || !Array.isArray(saved.messages)) return false;
+  const restored = saved.messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+  if (!restored.length) return false;
+  messages = restored;
+  messages.forEach(m => addBubble(m.role === 'user' ? 'user' : 'ai', m.role === 'user' ? esc(m.content) : renderMarkdown(m.content)));
+  (Array.isArray(saved.history) ? saved.history : []).filter(validTheme).forEach(addHistory);
+  lastDetected = validTheme(saved.theme) ? saved.theme : DEFAULT_THEME;
+  applyTheme(lastDetected, { record: false });
+  return true;
+}
+
+/* ==========================================================================
+   EVENTS
+   ========================================================================== */
+composer.addEventListener('submit', e => {
+  e.preventDefault();
+  if (busy) { abortCtrl && abortCtrl.abort(); return; }
+  send(inputEl.value);
+});
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!busy) send(inputEl.value); }
+});
+inputEl.addEventListener('input', () => { autoGrow(); updateSendState(); });
+
+moodToggle.checked = settings.mood;
+moodToggle.addEventListener('change', () => {
+  settings.mood = moodToggle.checked;
+  store.set('mood', settings.mood);
+  applyTheme(lastDetected, { record: false });
+});
+
+$('#newChat').addEventListener('click', newChat);
+statusEl.addEventListener('click', checkHealth);
+
+const settingsPanel = $('#settings'), settingsBtn = $('#settingsBtn');
+function toggleSettings(open) {
+  settingsPanel.classList.toggle('open', open);
+  settingsBtn.setAttribute('aria-expanded', String(open));
+  if (open) { $('#serverInput').value = settings.server; $('#thinkToggle').checked = settings.thinking; }
+}
+settingsBtn.addEventListener('click', e => { e.stopPropagation(); toggleSettings(!settingsPanel.classList.contains('open')); });
+settingsPanel.addEventListener('click', e => e.stopPropagation());
+document.addEventListener('click', () => toggleSettings(false));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSettings(false); });
+$('#saveSettings').addEventListener('click', () => {
+  let url = $('#serverInput').value.trim() || 'http://127.0.0.1:8080';
+  if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+  settings.server = url.replace(/\/+$/, '').replace(/\/v1$/, '');
+  settings.thinking = $('#thinkToggle').checked;
+  store.set('server', settings.server);
+  store.set('thinking', settings.thinking);
+  toggleSettings(false);
+  checkHealth();
+});
+
+/* soft light that follows the pointer (desktop only) */
+if (matchMedia('(hover: hover)').matches) {
+  const spot = $('#spot');
+  let queued = false, mx = 0, my = 0;
+  addEventListener('pointermove', e => {
+    mx = e.clientX; my = e.clientY;
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { spot.style.setProperty('--mx', mx + 'px'); spot.style.setProperty('--my', my + 'px'); queued = false; });
+  });
+} else {
+  $('#spot').style.opacity = '0';
+}
+
+/* ==========================================================================
+   START
+   ========================================================================== */
+const welcomeTemplate = $('#welcome').innerHTML;
+renderChips();
+if (!restoreChat()) applyTheme(DEFAULT_THEME, { record: false });
+updateSendState();
+checkHealth();
+setInterval(() => { if (!busy) checkHealth(); }, 6000);
+inputEl.focus();
+</script>
+</body>
+</html>

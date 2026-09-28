@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investment Calculator</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1c1d1f; --muted: #686b70; --line: #e2e0da;
+    --accent: #1f6f5c; --accent-soft: #e3f0ec; --good: #1f7a3d; --bad: #b3321f; --warn: #9a6a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141517; --card: #1d1f22; --ink: #ecebe7; --muted: #9a9ca1; --line: #2e3034;
+      --accent: #5cc4a6; --accent-soft: #1f302b; --good: #6fd08f; --bad: #ff8a73; --warn: #e8b64a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button { border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    padding: 8px 14px; border-radius: 999px; font: inherit; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .card h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 8px; }
+  label { display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 8px; margin: 6px 0; font-size: .92rem; }
+  label small { display: block; color: var(--muted); font-size: .78rem; }
+  input, select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .kpi { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+  .kpi .k { font-size: .78rem; color: var(--muted); }
+  .kpi .v { font-size: 1.15rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tbl { overflow-x: auto; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .9rem; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .note { color: var(--muted); font-size: .82rem; margin-top: 12px; }
+  .verdict { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); font-size: .92rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Investment Calculator</h1>
+  <p class="sub">Exact maths to double-check the AI's answers. Works offline. Numbers only – it does not predict the market.</p>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="stake">Stake property</button>
+    <button role="tab" aria-selected="false" data-tab="stock">Indian stock</button>
+    <button role="tab" aria-selected="false" data-tab="fx">Forex</button>
+  </div>
+
+  <!-- ================= STAKE ================= -->
+  <section id="tab-stake" class="grid">
+    <div class="card">
+      <h2>Stake property inputs</h2>
+      <h3>Your investment</h3>
+      <label>My investment <input id="s_inv" type="number" value="5000"></label>
+      <label>Property price when I bought <input id="s_price" type="number" value="1500000"></label>
+      <label><span>Current valuation<small>same as price if new</small></span><input id="s_now" type="number" value="1500000"></label>
+      <h3>Income &amp; costs (whole property, per year)</h3>
+      <label><span>Gross yield %<small>on current valuation</small></span><input id="s_gy" type="number" step="0.1" value="7"></label>
+      <label>Service charges <input id="s_sc" type="number" value="25000"></label>
+      <label><span>Platform/management fee %<small>per year, on value</small></span><input id="s_fee" type="number" step="0.1" value="1.5"></label>
+      <label>Maintenance <input id="s_mt" type="number" value="0"></label>
+      <label><span>Vacancy allowance %<small>of gross rent</small></span><input id="s_vac" type="number" step="0.5" value="5"></label>
+      <h3>Growth scenarios (value per year)</h3>
+      <label>Bullish % <input id="s_bull" type="number" step="0.5" value="7"></label>
+      <label>Base % <input id="s_base" type="number" step="0.5" value="3"></label>
+      <label>Bearish % <input id="s_bear" type="number" step="0.5" value="-3"></label>
+      <label>Holding period (years) <input id="s_yrs" type="number" min="1" max="30" value="5"></label>
+      <label><span>Exit costs %<small>on sale value</small></span><input id="s_exit" type="number" step="0.1" value="2"></label>
+    </div>
+    <div class="card">
+      <h2>Results</h2>
+      <div class="kpis" id="s_kpis"></div>
+      <div class="tbl"><table id="s_table"></table></div>
+      <div class="tbl"><table id="s_total"></table></div>
+      <div class="verdict" id="s_verdict"></div>
+      <p class="note">Rent is kept flat at today's level (conservative). Your costs are always your share % of the property's costs – you never pay the whole building's fees.</p>
+    </div>
+  </section>
+
+  <!-- ================= STOCK ================= -->
+  <section id="tab-stock" class="grid" hidden>
+    <div class="card">
+      <h2>Indian stock inputs</h2>
+      <h3>New trade</h3>
+      <label>My capital (Rs) <input id="k_cap" type="number" value="200000"></label>
+      <label>Max risk % per trade <input id="k_risk" type="number" step="0.1" value="1"></label>
+      <label>Entry price <input id="k_entry" type="number" step="0.05" value="1250"></label>
+      <label>Stop-loss <input id="k_sl" type="number" step="0.05" value="1180"></label>
+      <label>Target 1 <input id="k_t1" type="number" step="0.05" value="1320"></label>
+      <label>Target 2 <input id="k_t2" type="number" step="0.05" value="1420"></label>
+      <h3>Shares I already own (optional)</h3>
+      <label>My buy price <input id="k_buy" type="number" step="0.05" value=""></label>
+      <label>Quantity <input id="k_qty" type="number" value=""></label>
+      <label>Current price <input id="k_cur" type="number" step="0.05" value=""></label>
+    </div>
+    <div class="card">
+      <h2>Results</h2>
+      <div class="kpis" id="k_kpis"></div>
+      <div class="tbl"><table id="k_table"></table></div>
+      <div class="verdict" id="k_verdict"></div>
+      <div id="k_hold"></div>
+      <p class="note">Before brokerage, STT, exchange charges and tax. Short-term gains (held under 12 months) are taxed higher than long-term – check current rates with your broker or CA.</p>
+    </div>
+  </section>
+
+  <!-- ================= FOREX ================= -->
+  <section id="tab-fx" class="grid" hidden>
+    <div class="card">
+      <h2>Forex inputs (USD account)</h2>
+      <label>Account size ($) <input id="f_acc" type="number" value="5000"></label>
+      <label>Max risk % per trade <input id="f_risk" type="number" step="0.1" value="1"></label>
+      <label>Pair type
+        <select id="f_type">
+          <option value="xusd">XXX/USD (EUR/USD, GBP/USD…)</option>
+          <option value="usdjpy">USD/JPY</option>
+          <option value="usdx">USD/XXX (USD/CAD, USD/CHF…)</option>
+          <option value="xjpy">XXX/JPY cross (EUR/JPY…)</option>
+        </select>
+      </label>
+      <label id="f_usdjpy_row" hidden><span>USD/JPY rate<small>for JPY crosses</small></span><input id="f_usdjpy" type="number" step="0.01" value="150"></label>
+      <label>Entry price <input id="f_entry" type="number" step="0.00001" value="1.2765"></label>
+      <label>Stop-loss <input id="f_sl" type="number" step="0.00001" value="1.2730"></label>
+      <label>Take-profit <input id="f_tp" type="number" step="0.00001" value="1.2850"></label>
+    </div>
+    <div class="card">
+      <h2>Results</h2>
+      <div class="kpis" id="f_kpis"></div>
+      <div class="verdict" id="f_verdict"></div>
+      <p class="note">Pip = 0.0001 (0.01 for JPY pairs). 1 standard lot = 100,000 units. Round lots DOWN to what your broker allows. Spreads and swaps not included.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+const fmt = (v, d = 0) => isFinite(v) ? v.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }) : '–';
+const pct = (v, d = 2) => isFinite(v) ? v.toFixed(d) + '%' : '–';
+const cls = v => v > 0 ? 'good' : v < 0 ? 'bad' : '';
+const kpi = (k, v, c = '') => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
+
+// tabs
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+  ['stake', 'stock', 'fx'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
+  try { localStorage.setItem('calc-tab', b.dataset.tab); } catch (e) {}
+}));
+try { const t = localStorage.getItem('calc-tab'); if (t) document.querySelector(`[data-tab="${t}"]`)?.click(); } catch (e) {}
+
+function stake() {
+  const inv = num('s_inv'), price = num('s_price'), now = num('s_now') || price;
+  const share = price > 0 ? inv / price : 0;
+  const gross = now * num('s_gy') / 100;
+  const costs = num('s_sc') + now * num('s_fee') / 100 + num('s_mt') + gross * num('s_vac') / 100;
+  const netRent = gross - costs, netYield = now > 0 ? netRent / now * 100 : 0;
+  const myYear = netRent * share, stakeNow = now * share;
+  const yrs = Math.max(1, Math.min(30, Math.round(num('s_yrs')))), exit = num('s_exit') / 100;
+  $('s_kpis').innerHTML =
+    kpi('My share', pct(share * 100, 4)) +
+    kpi('My stake value today', fmt(stakeNow)) +
+    kpi('Net yield', pct(netYield), cls(netYield)) +
+    kpi('My income / year', fmt(myYear), cls(myYear)) +
+    kpi('My income / month', fmt(myYear / 12, 2), cls(myYear));
+  const sc = [['Bullish', num('s_bull')], ['Base', num('s_base')], ['Bearish', num('s_bear')]];
+  let head = '<tr><th>My stake value</th>' + sc.map(s => `<th>${s[0]} (${s[1]}%)</th>`).join('') + '</tr>';
+  let rows = '', vals = sc.map(() => stakeNow);
+  rows += '<tr><td>Today</td>' + vals.map(v => `<td>${fmt(v)}</td>`).join('') + '</tr>';
+  for (let y = 1; y <= yrs; y++) {
+    vals = vals.map((v, i) => v * (1 + sc[i][1] / 100));
+    rows += `<tr><td>Year ${y}</td>` + vals.map(v => `<td>${fmt(v)}</td>`).join('') + '</tr>';
+  }
+  $('s_table').innerHTML = head + rows;
+  const rent = myYear * yrs;
+  const tot = vals.map(v => { const sale = v * (1 - exit); const r = rent + sale - inv; return { sale, r, p: inv ? r / inv * 100 : 0, a: inv ? (Math.pow(Math.max(0, (rent + sale) / inv), 1 / yrs) - 1) * 100 : 0 }; });
+  $('s_total').innerHTML = `<tr><th>After ${yrs} years</th>` + sc.map(s => `<th>${s[0]}</th>`).join('') + '</tr>' +
+    '<tr><td>Total net rent</td>' + tot.map(() => `<td>${fmt(rent)}</td>`).join('') + '</tr>' +
+    '<tr><td>Sale value after exit costs</td>' + tot.map(t => `<td>${fmt(t.sale)}</td>`).join('') + '</tr>' +
+    '<tr><td>Total profit</td>' + tot.map(t => `<td class="${cls(t.r)}">${fmt(t.r)}</td>`).join('') + '</tr>' +
+    '<tr><td>Total return</td>' + tot.map(t => `<td class="${cls(t.p)}">${pct(t.p, 1)}</td>`).join('') + '</tr>' +
+    '<tr><td>≈ per year (compound)</td>' + tot.map(t => `<td class="${cls(t.a)}">${pct(t.a, 1)}</td>`).join('') + '</tr>';
+  const gain = now > 0 && price > 0 ? (now / price - 1) * 100 : 0;
+  $('s_verdict').innerHTML = `Costs take <b>${pct(gross ? costs / gross * 100 : 0, 1)}</b> of the gross rent. ` +
+    (price !== now ? `Your stake is <b class="${cls(gain)}">${pct(gain, 1)}</b> vs your purchase price. ` : '') +
+    (netYield < 3 ? '<span class="warn">Net yield is under 3% – income is thin after costs.</span>' : netYield >= 6 ? '<span class="good">Net yield is healthy (6%+).</span>' : 'Net yield is moderate.');
+}
+
+function stock() {
+  const cap = num('k_cap'), risk = cap * num('k_risk') / 100, e = num('k_entry'), sl = num('k_sl');
+  const rps = e - sl, qty = rps > 0 ? Math.floor(risk / rps) : 0, need = qty * e;
+  const qtyCap = e > 0 ? Math.floor(cap / e) : 0, q = Math.min(qty, qtyCap);
+  $('k_kpis').innerHTML =
+    kpi('Max risk (Rs)', fmt(risk)) + kpi('Risk per share', fmt(rps, 2), rps > 0 ? '' : 'bad') +
+    kpi('Quantity', fmt(q)) + kpi('Money needed', fmt(q * e)) + kpi('% of capital', pct(cap ? q * e / cap * 100 : 0, 1));
+  const tg = [['Target 1', num('k_t1')], ['Target 2', num('k_t2')]].filter(t => t[1] > 0);
+  $('k_table').innerHTML = '<tr><th></th><th>Price</th><th>Move</th><th>Risk : reward</th><th>Profit (Rs)</th></tr>' +
+    tg.map(t => { const rr = rps > 0 ? (t[1] - e) / rps : NaN; return `<tr><td>${t[0]}</td><td>${fmt(t[1], 2)}</td><td>${pct(e ? (t[1] / e - 1) * 100 : 0)}</td><td class="${rr >= 2 ? 'good' : rr >= 1.5 ? 'warn' : 'bad'}">1 : ${isFinite(rr) ? rr.toFixed(2) : '–'}</td><td class="${cls(t[1] - e)}">${fmt((t[1] - e) * q)}</td></tr>`; }).join('') +
+    `<tr><td>Stop-loss</td><td>${fmt(sl, 2)}</td><td>${pct(e ? (sl / e - 1) * 100 : 0)}</td><td></td><td class="bad">${fmt((sl - e) * q)}</td></tr>`;
+  const best = Math.max(...tg.map(t => rps > 0 ? (t[1] - e) / rps : -1), -1);
+  $('k_verdict').innerHTML = rps <= 0 ? '<span class="bad">Stop-loss must be below the entry price for a buy.</span>' :
+    (qty > qtyCap ? `<span class="warn">1% risk would need ${fmt(qty)} shares but capital allows only ${fmt(qtyCap)}.</span> ` : '') +
+    (best >= 2 ? '<span class="good">Risk : reward is 1:2 or better.</span>' : best >= 1.5 ? '<span class="warn">Risk : reward is OK but under 1:2.</span>' : '<span class="bad">Risk : reward under 1:1.5 – usually NO TRADE.</span>');
+  const b = num('k_buy'), n = num('k_qty'), c = num('k_cur');
+  $('k_hold').innerHTML = b > 0 && n > 0 && c > 0 ? `<div class="kpis" style="margin-top:12px">` +
+    kpi('Invested', fmt(b * n)) + kpi('Value now', fmt(c * n)) +
+    kpi('Profit / loss', fmt((c - b) * n), cls(c - b)) + kpi('Profit / loss %', pct((c / b - 1) * 100), cls(c - b)) + '</div>' : '';
+}
+
+function fx() {
+  const type = $('f_type').value; $('f_usdjpy_row').hidden = type !== 'xjpy';
+  const acc = num('f_acc'), risk = acc * num('f_risk') / 100, e = num('f_entry'), sl = num('f_sl'), tp = num('f_tp');
+  const jpy = type === 'usdjpy' || type === 'xjpy', pip = jpy ? 0.01 : 0.0001;
+  let pv = 10; // $ per pip per standard lot
+  if (type === 'usdjpy') pv = e > 0 ? 1000 / e : 0;
+  if (type === 'usdx') pv = e > 0 ? 10 / e : 0;
+  if (type === 'xjpy') pv = num('f_usdjpy') > 0 ? 1000 / num('f_usdjpy') : 0;
+  const slp = Math.abs(e - sl) / pip, tpp = Math.abs(tp - e) / pip;
+  const lots = slp > 0 && pv > 0 ? risk / (slp * pv) : 0, lotsDown = Math.floor(lots * 100) / 100;
+  const rr = slp > 0 ? tpp / slp : NaN, dir = tp > e ? 'BUY (long)' : 'SELL (short)';
+  const okSide = (tp > e && sl < e) || (tp < e && sl > e);
+  $('f_kpis').innerHTML = kpi('Direction', dir) + kpi('Max risk ($)', fmt(risk, 2)) +
+    kpi('Stop distance', fmt(slp, 1) + ' pips') + kpi('Target distance', fmt(tpp, 1) + ' pips') +
+    kpi('Pip value / lot', '$' + fmt(pv, 2)) + kpi('Position size', fmt(lotsDown, 2) + ' lots') +
+    kpi('Units', fmt(lotsDown * 100000)) + kpi('Risk : reward', '1 : ' + (isFinite(rr) ? rr.toFixed(2) : '–'), rr >= 2 ? 'good' : rr >= 1.5 ? 'warn' : 'bad') +
+    kpi('Loss at stop', '$' + fmt(slp * pv * lotsDown, 2), 'bad') + kpi('Profit at target', '$' + fmt(tpp * pv * lotsDown, 2), 'good');
+  $('f_verdict').innerHTML = !okSide ? '<span class="bad">Stop-loss and take-profit must be on opposite sides of the entry.</span>' :
+    rr >= 2 ? '<span class="good">Risk : reward is 1:2 or better.</span>' : rr >= 1.5 ? '<span class="warn">Risk : reward is under 1:2.</span>' : '<span class="bad">Risk : reward under 1:1.5 – usually NO TRADE.</span>';
+}
+
+document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', () => { stake(); stock(); fx(); }));
+stake(); stock(); fx();
+</script>
+</body>
+</html>
